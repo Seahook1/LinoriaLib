@@ -3848,38 +3848,37 @@ function Library:CreateWindow(...)
 
     if Config.AutoShow then task.spawn(Library.Toggle) end
 
-    -- ── Lock UI & Toggle UI Buttons (top-right, below Roblox topbar) ──────────
+    -- ── Lock UI & Toggle UI Buttons (top-left, below Roblox topbar) ───────────
     do
         local UILocked  = false;
         local UIVisible = true; -- mirrors Toggled state
 
-        -- Container pinned to the top-right corner of the screen,
-        -- 36 px below the Roblox top bar buttons, 6 px from the right edge.
+        -- Container pinned to the top-left corner, 36 px below the Roblox bar.
         local BtnContainer = Library:Create('Frame', {
             Name                 = 'UIControlButtons';
-            AnchorPoint          = Vector2.new(1, 0);
+            AnchorPoint          = Vector2.new(0, 0);
             BackgroundTransparency = 1;
-            Position             = UDim2.new(1, -6, 0, 36 + 4);
-            Size                 = UDim2.new(0, 90, 0, 24);
+            Position             = UDim2.new(0, 6, 0, 36 + 4);
+            Size                 = UDim2.new(0, 160, 0, 22);
             ZIndex               = 100;
             Parent               = ScreenGui;
         });
 
         Library:Create('UIListLayout', {
             FillDirection        = Enum.FillDirection.Horizontal;
-            HorizontalAlignment  = Enum.HorizontalAlignment.Right;
+            HorizontalAlignment  = Enum.HorizontalAlignment.Left;
             VerticalAlignment    = Enum.VerticalAlignment.Center;
             Padding              = UDim.new(0, 4);
             SortOrder            = Enum.SortOrder.LayoutOrder;
             Parent               = BtnContainer;
         });
 
-        -- Helper: create a small pill-shaped button
-        local function MakePillBtn(name, label, order)
+        -- Helper: rectangular button with blue (AccentColor) outline, matching UI
+        local function MakeRectBtn(name, label, order)
             local Btn = Library:Create('TextButton', {
                 Name             = name;
                 LayoutOrder      = order;
-                Size             = UDim2.new(0, 43, 0, 22);
+                Size             = UDim2.new(0, 78, 0, 22);
                 BackgroundColor3 = Library.MainColor;
                 BorderSizePixel  = 0;
                 Text             = label;
@@ -3891,13 +3890,9 @@ function Library:CreateWindow(...)
                 Parent           = BtnContainer;
             });
 
-            Library:Create('UICorner', {
-                CornerRadius = UDim.new(0, 5);
-                Parent       = Btn;
-            });
-
-            Library:Create('UIStroke', {
-                Color     = Library.OutlineColor;
+            -- Blue (AccentColor) outline — no corner radius = rectangular
+            local Stroke = Library:Create('UIStroke', {
+                Color     = Library.AccentColor;
                 Thickness = 1;
                 Parent    = Btn;
             });
@@ -3906,68 +3901,54 @@ function Library:CreateWindow(...)
                 BackgroundColor3 = 'MainColor';
                 TextColor3       = 'FontColor';
             });
+            Library:AddToRegistry(Stroke, {
+                Color = 'AccentColor';
+            });
 
-            -- Hover tint
+            -- Hover: slightly brighten background like other lib buttons do
             Btn.MouseEnter:Connect(function()
-                Btn.BackgroundColor3 = Library.AccentColor;
+                Btn.BackgroundColor3 = Library.BackgroundColor;
             end);
             Btn.MouseLeave:Connect(function()
-                if name == 'LockUIBtn' then
-                    Btn.BackgroundColor3 = UILocked
-                        and Color3.fromRGB(120, 40, 40)
-                        or  Library.MainColor;
-                else
-                    Btn.BackgroundColor3 = (not UIVisible)
-                        and Color3.fromRGB(40, 100, 60)
-                        or  Library.MainColor;
-                end;
+                Btn.BackgroundColor3 = Library.MainColor;
             end);
 
             return Btn;
         end;
 
-        -- ── Toggle UI button (Hide / Show) ────────────────────────────────────
-        local ToggleUIBtn = MakePillBtn('ToggleUIBtn', 'Hide UI', 1);
+        -- ── Toggle UI button (Hide UI / Show UI) ──────────────────────────────
+        local ToggleUIBtn = MakeRectBtn('ToggleUIBtn', 'Hide UI', 1);
 
         ToggleUIBtn.MouseButton1Click:Connect(function()
             -- Reuse the library's own toggle so fade animations still work
             task.spawn(Library.Toggle);
 
-            -- UIVisible will now be the opposite of what Toggled was;
-            -- we derive the new label from Toggled (set inside Library:Toggle)
-            -- one frame after the call so the flip has happened.
+            -- Derive the new label one frame later, after Library:Toggle has
+            -- flipped the internal Toggled variable.
             task.defer(function()
                 UIVisible = Toggled;
                 ToggleUIBtn.Text = UIVisible and 'Hide UI' or 'Show UI';
-                ToggleUIBtn.BackgroundColor3 = UIVisible
-                    and Library.MainColor
-                    or  Color3.fromRGB(40, 100, 60);
             end);
         end);
 
-        -- ── Lock UI button (Lock / Unlock) ────────────────────────────────────
-        local LockUIBtn = MakePillBtn('LockUIBtn', 'Lock UI', 2);
+        -- ── Lock UI button (Lock UI / Unlock UI) ──────────────────────────────
+        local LockUIBtn = MakeRectBtn('LockUIBtn', 'Lock UI', 2);
 
         LockUIBtn.MouseButton1Click:Connect(function()
             UILocked = not UILocked;
 
-            -- Toggling Active on Outer prevents MakeDraggable from responding
-            -- to input (InputBegan still fires but the drag loop checks Active).
+            -- Setting Active = false on Outer stops MakeDraggable from
+            -- responding to input (its InputBegan handler is still connected
+            -- but the drag loop itself checks Active before moving the frame).
             Outer.Active = not UILocked;
 
-            LockUIBtn.Text = UILocked and 'Unlock' or 'Lock UI';
-            LockUIBtn.BackgroundColor3 = UILocked
-                and Color3.fromRGB(120, 40, 40)
-                or  Library.MainColor;
+            LockUIBtn.Text = UILocked and 'Unlock UI' or 'Lock UI';
         end);
 
-        -- Keep button labels in sync when the library's own keybind hides/shows
+        -- Keep toggle label in sync when the library's own keybind hides/shows
         Library:GiveSignal(Outer:GetPropertyChangedSignal('Visible'):Connect(function()
             UIVisible = Outer.Visible;
             ToggleUIBtn.Text = UIVisible and 'Hide UI' or 'Show UI';
-            ToggleUIBtn.BackgroundColor3 = UIVisible
-                and Library.MainColor
-                or  Color3.fromRGB(40, 100, 60);
         end));
     end;
     -- ── End Lock/Toggle buttons ───────────────────────────────────────────────
