@@ -3851,101 +3851,116 @@ function Library:CreateWindow(...)
     -- ── Lock UI & Toggle UI Buttons (top-left, below Roblox topbar) ───────────
     do
         local UILocked  = false;
-        local UIVisible = true; -- mirrors Toggled state
+        local UIVisible = true;
 
-        -- Container pinned to the top-left corner, 36 px below the Roblox bar.
+        -- Outer container: stacked vertically, top-left, 36 px below Roblox bar
         local BtnContainer = Library:Create('Frame', {
             Name                 = 'UIControlButtons';
             AnchorPoint          = Vector2.new(0, 0);
             BackgroundTransparency = 1;
-            Position             = UDim2.new(0, 6, 0, 36 + 4);
-            Size                 = UDim2.new(0, 160, 0, 22);
+            Position             = UDim2.new(0, 0, 0, 36);
+            Size                 = UDim2.new(0, 130, 0, 48);
             ZIndex               = 100;
             Parent               = ScreenGui;
         });
 
         Library:Create('UIListLayout', {
-            FillDirection        = Enum.FillDirection.Horizontal;
-            HorizontalAlignment  = Enum.HorizontalAlignment.Left;
-            VerticalAlignment    = Enum.VerticalAlignment.Center;
-            Padding              = UDim.new(0, 4);
-            SortOrder            = Enum.SortOrder.LayoutOrder;
-            Parent               = BtnContainer;
+            FillDirection       = Enum.FillDirection.Vertical;
+            HorizontalAlignment = Enum.HorizontalAlignment.Left;
+            VerticalAlignment   = Enum.VerticalAlignment.Top;
+            Padding             = UDim.new(0, 0);  -- flush, like tab rows
+            SortOrder           = Enum.SortOrder.LayoutOrder;
+            Parent              = BtnContainer;
         });
 
-        -- Helper: rectangular button with blue (AccentColor) outline, matching UI
-        local function MakeRectBtn(name, label, order)
+        --[[
+            Style matches the image exactly:
+              • Dark (MainColor) background
+              • White Gotham SemiBold text, left-aligned with padding
+              • Solid AccentColor (blue) bar on the LEFT edge (2 px wide Frame)
+              • No rounded corners, no UIStroke border box
+        ]]
+        local function MakeTabBtn(name, label, order)
+            -- Row wrapper
+            local Row = Library:Create('Frame', {
+                Name             = name .. 'Row';
+                LayoutOrder      = order;
+                Size             = UDim2.new(0, 130, 0, 24);
+                BackgroundColor3 = Library.MainColor;
+                BorderSizePixel  = 0;
+                ZIndex           = 100;
+                Parent           = BtnContainer;
+            });
+            Library:AddToRegistry(Row, { BackgroundColor3 = 'MainColor' });
+
+            -- Blue left accent bar (same as the blue line seen in the image)
+            local Accent = Library:Create('Frame', {
+                Name             = 'Accent';
+                Size             = UDim2.new(0, 2, 1, 0);
+                Position         = UDim2.new(0, 0, 0, 0);
+                BackgroundColor3 = Library.AccentColor;
+                BorderSizePixel  = 0;
+                ZIndex           = 101;
+                Parent           = Row;
+            });
+            Library:AddToRegistry(Accent, { BackgroundColor3 = 'AccentColor' });
+
+            -- Clickable text button sitting beside the accent bar
             local Btn = Library:Create('TextButton', {
                 Name             = name;
-                LayoutOrder      = order;
-                Size             = UDim2.new(0, 78, 0, 22);
-                BackgroundColor3 = Library.MainColor;
+                Size             = UDim2.new(1, -2, 1, 0);
+                Position         = UDim2.new(0, 2, 0, 0);
+                BackgroundTransparency = 1;
                 BorderSizePixel  = 0;
                 Text             = label;
                 TextColor3       = Library.FontColor;
-                TextSize         = 11;
-                Font             = Enum.Font.GothamBold;
-                ZIndex           = 101;
+                TextXAlignment   = Enum.TextXAlignment.Left;
+                TextSize         = 13;
+                Font             = Enum.Font.GothamSemibold;
+                ZIndex           = 102;
                 AutoButtonColor  = false;
-                Parent           = BtnContainer;
+                Parent           = Row;
+            });
+            Library:AddToRegistry(Btn, { TextColor3 = 'FontColor' });
+
+            -- Left padding so text doesn't hug the accent bar
+            Library:Create('UIPadding', {
+                PaddingLeft = UDim.new(0, 6);
+                Parent      = Btn;
             });
 
-            -- Blue (AccentColor) outline — no corner radius = rectangular
-            local Stroke = Library:Create('UIStroke', {
-                Color     = Library.AccentColor;
-                Thickness = 1;
-                Parent    = Btn;
-            });
-
-            Library:AddToRegistry(Btn, {
-                BackgroundColor3 = 'MainColor';
-                TextColor3       = 'FontColor';
-            });
-            Library:AddToRegistry(Stroke, {
-                Color = 'AccentColor';
-            });
-
-            -- Hover: slightly brighten background like other lib buttons do
+            -- Hover: dim the row slightly
             Btn.MouseEnter:Connect(function()
-                Btn.BackgroundColor3 = Library.BackgroundColor;
+                Row.BackgroundColor3 = Library.BackgroundColor;
             end);
             Btn.MouseLeave:Connect(function()
-                Btn.BackgroundColor3 = Library.MainColor;
+                Row.BackgroundColor3 = Library.MainColor;
             end);
 
             return Btn;
         end;
 
-        -- ── Toggle UI button (Hide UI / Show UI) ──────────────────────────────
-        local ToggleUIBtn = MakeRectBtn('ToggleUIBtn', 'Hide UI', 1);
+        -- ── Toggle UI (Hide UI / Show UI) ─────────────────────────────────────
+        local ToggleUIBtn = MakeTabBtn('ToggleUIBtn', 'Hide UI', 1);
 
         ToggleUIBtn.MouseButton1Click:Connect(function()
-            -- Reuse the library's own toggle so fade animations still work
             task.spawn(Library.Toggle);
-
-            -- Derive the new label one frame later, after Library:Toggle has
-            -- flipped the internal Toggled variable.
             task.defer(function()
                 UIVisible = Toggled;
                 ToggleUIBtn.Text = UIVisible and 'Hide UI' or 'Show UI';
             end);
         end);
 
-        -- ── Lock UI button (Lock UI / Unlock UI) ──────────────────────────────
-        local LockUIBtn = MakeRectBtn('LockUIBtn', 'Lock UI', 2);
+        -- ── Lock UI (Lock UI / Unlock UI) ─────────────────────────────────────
+        local LockUIBtn = MakeTabBtn('LockUIBtn', 'Lock UI', 2);
 
         LockUIBtn.MouseButton1Click:Connect(function()
             UILocked = not UILocked;
-
-            -- Setting Active = false on Outer stops MakeDraggable from
-            -- responding to input (its InputBegan handler is still connected
-            -- but the drag loop itself checks Active before moving the frame).
             Outer.Active = not UILocked;
-
             LockUIBtn.Text = UILocked and 'Unlock UI' or 'Lock UI';
         end);
 
-        -- Keep toggle label in sync when the library's own keybind hides/shows
+        -- Stay in sync with keybind toggling
         Library:GiveSignal(Outer:GetPropertyChangedSignal('Visible'):Connect(function()
             UIVisible = Outer.Visible;
             ToggleUIBtn.Text = UIVisible and 'Hide UI' or 'Show UI';
