@@ -224,6 +224,9 @@ function Library:MakeDraggable(Instance, Cutoff)
     local TouchCutoff = math.max(MouseCutoff, 56);
 
     Instance.InputBegan:Connect(function(Input)
+        -- Respect the lock flag set by the Lock UI button
+        if Instance._DragLocked then return end;
+
         if not Library:IsPrimaryInput(Input) then
             return;
         end;
@@ -241,6 +244,8 @@ function Library:MakeDraggable(Instance, Cutoff)
         end;
 
         while Library:IsPrimaryInputHeld() do
+            if Instance._DragLocked then break end;
+
             local NPX, NPY = Library:GetPointerPosition();
 
             Instance.Position = UDim2.new(
@@ -3853,39 +3858,51 @@ function Library:CreateWindow(...)
         local UILocked  = false;
         local UIVisible = true;
 
-        -- Outer container: stacked vertically, top-left, 36 px below Roblox bar
+        --[[
+            Container: sharp-edged (pixelated, no UICorner), draggable,
+            blue UIStroke outline, dark background — matches LinoriaLib style.
+        ]]
         local BtnContainer = Library:Create('Frame', {
-            Name                 = 'UIControlButtons';
-            AnchorPoint          = Vector2.new(0, 0);
-            BackgroundTransparency = 1;
-            Position             = UDim2.new(0, 0, 0, 36);
-            Size                 = UDim2.new(0, 130, 0, 48);
-            ZIndex               = 100;
-            Parent               = ScreenGui;
+            Name             = 'UIControlButtons';
+            AnchorPoint      = Vector2.new(0, 0);
+            BackgroundColor3 = Library.MainColor;
+            BorderSizePixel  = 0;
+            Position         = UDim2.new(0, 6, 0, 36 + 4);
+            Size             = UDim2.new(0, 120, 0, 48);
+            ZIndex           = 100;
+            Active           = true;   -- required for MakeDraggable
+            Parent           = ScreenGui;
         });
+        Library:AddToRegistry(BtnContainer, { BackgroundColor3 = 'MainColor' });
 
+        -- Blue outline around the whole container (AccentColor, 1 px, sharp)
+        local ContainerStroke = Library:Create('UIStroke', {
+            Color            = Library.AccentColor;
+            Thickness        = 1;
+            LineJoinMode     = Enum.LineJoinMode.Miter;  -- sharp pixel corners
+            Parent           = BtnContainer;
+        });
+        Library:AddToRegistry(ContainerStroke, { Color = 'AccentColor' });
+
+        -- Stack buttons vertically, flush
         Library:Create('UIListLayout', {
             FillDirection       = Enum.FillDirection.Vertical;
             HorizontalAlignment = Enum.HorizontalAlignment.Left;
             VerticalAlignment   = Enum.VerticalAlignment.Top;
-            Padding             = UDim.new(0, 0);  -- flush, like tab rows
+            Padding             = UDim.new(0, 0);
             SortOrder           = Enum.SortOrder.LayoutOrder;
             Parent              = BtnContainer;
         });
 
-        --[[
-            Style matches the image exactly:
-              • Dark (MainColor) background
-              • White Gotham SemiBold text, left-aligned with padding
-              • Solid AccentColor (blue) bar on the LEFT edge (2 px wide Frame)
-              • No rounded corners, no UIStroke border box
-        ]]
+        -- Make the whole container draggable (drag from anywhere on it)
+        Library:MakeDraggable(BtnContainer, 9999);
+
+        -- Row button: dark bg, white left-aligned GothamSemibold, blue left bar
         local function MakeTabBtn(name, label, order)
-            -- Row wrapper
             local Row = Library:Create('Frame', {
                 Name             = name .. 'Row';
                 LayoutOrder      = order;
-                Size             = UDim2.new(0, 130, 0, 24);
+                Size             = UDim2.new(1, 0, 0, 24);
                 BackgroundColor3 = Library.MainColor;
                 BorderSizePixel  = 0;
                 ZIndex           = 100;
@@ -3893,7 +3910,7 @@ function Library:CreateWindow(...)
             });
             Library:AddToRegistry(Row, { BackgroundColor3 = 'MainColor' });
 
-            -- Blue left accent bar (same as the blue line seen in the image)
+            -- 2 px blue accent bar on the left edge
             local Accent = Library:Create('Frame', {
                 Name             = 'Accent';
                 Size             = UDim2.new(0, 2, 1, 0);
@@ -3905,7 +3922,19 @@ function Library:CreateWindow(...)
             });
             Library:AddToRegistry(Accent, { BackgroundColor3 = 'AccentColor' });
 
-            -- Clickable text button sitting beside the accent bar
+            -- 1 px divider line between rows (only on the bottom of row 1)
+            if order == 1 then
+                Library:Create('Frame', {
+                    Name             = 'Divider';
+                    Size             = UDim2.new(1, 0, 0, 1);
+                    Position         = UDim2.new(0, 0, 1, -1);
+                    BackgroundColor3 = Library.OutlineColor;
+                    BorderSizePixel  = 0;
+                    ZIndex           = 101;
+                    Parent           = Row;
+                });
+            end;
+
             local Btn = Library:Create('TextButton', {
                 Name             = name;
                 Size             = UDim2.new(1, -2, 1, 0);
@@ -3923,13 +3952,11 @@ function Library:CreateWindow(...)
             });
             Library:AddToRegistry(Btn, { TextColor3 = 'FontColor' });
 
-            -- Left padding so text doesn't hug the accent bar
             Library:Create('UIPadding', {
                 PaddingLeft = UDim.new(0, 6);
                 Parent      = Btn;
             });
 
-            -- Hover: dim the row slightly
             Btn.MouseEnter:Connect(function()
                 Row.BackgroundColor3 = Library.BackgroundColor;
             end);
@@ -3956,11 +3983,12 @@ function Library:CreateWindow(...)
 
         LockUIBtn.MouseButton1Click:Connect(function()
             UILocked = not UILocked;
-            Outer.Active = not UILocked;
+            -- _DragLocked is checked inside MakeDraggable's InputBegan handler
+            Outer._DragLocked = UILocked;
             LockUIBtn.Text = UILocked and 'Unlock UI' or 'Lock UI';
         end);
 
-        -- Stay in sync with keybind toggling
+        -- Stay in sync if the library's keybind is used to hide/show
         Library:GiveSignal(Outer:GetPropertyChangedSignal('Visible'):Connect(function()
             UIVisible = Outer.Visible;
             ToggleUIBtn.Text = UIVisible and 'Hide UI' or 'Show UI';
