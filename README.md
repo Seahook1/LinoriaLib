@@ -37,8 +37,8 @@ local Toggles = Library.Toggles
 local Options  = Library.Options
 
 local Window = Library:CreateWindow({
-    Title         = "Ethereal.free",
-    Footer        = "Made by Insomnia and AJ",
+    Title         = "Bleed lua free",
+    Footer        = "Made by Xyr0 and AJ",
     Center        = true,
     AutoShow      = true,
     ToggleKeybind = Enum.KeyCode.RightShift,
